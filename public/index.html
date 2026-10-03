@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>机载维护站 · 读卡器升级指令复核</title>
+  <style>
+    :root { --bg:#0f1419; --panel:#171e26; --line:#2a3644; --fg:#e6edf3; --mut:#8b9bb0; --ok:#3fb950; --bad:#f85149; --warn:#d29922; --reader:#58a6ff; --card:#d2a8ff; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:14px/1.5 -apple-system,Segoe UI,Roboto,"Helvetica Neue",sans-serif; background:var(--bg); color:var(--fg); }
+    header { padding:16px 24px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+    header h1 { font-size:17px; margin:0; font-weight:600; }
+    #health { font-size:12px; color:var(--mut); }
+    #health b.ok { color:var(--ok); } #health b.bad { color:var(--bad); }
+    main { max-width:1180px; margin:0 auto; padding:20px 24px 64px; display:grid; grid-template-columns:420px 1fr; gap:20px; }
+    @media (max-width:980px){ main{ grid-template-columns:1fr; } }
+    section.panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; }
+    h2 { font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--mut); margin:0 0 12px; }
+    label { display:block; font-size:12px; color:var(--mut); margin:10px 0 4px; }
+    input[type=text], input[type=number], textarea, select {
+      width:100%; background:#0d1117; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:8px 10px; font:inherit;
+    }
+    textarea { min-height:230px; resize:vertical; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.5px; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    button { background:#213042; color:var(--fg); border:1px solid #314c66; border-radius:6px; padding:8px 16px; font:inherit; cursor:pointer; }
+    button:hover { background:#2a3f57; }
+    button.primary { background:#1f6feb; border-color:#1f6feb; }
+    button.primary:hover { background:#388bfd; }
+    .hint { font-size:11.5px; color:var(--mut); margin-top:6px; }
+    .verdict { border-radius:8px; padding:12px 14px; font-weight:600; display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+    .verdict.accept { background:rgba(63,185,80,.12); border:1px solid rgba(63,185,80,.4); color:var(--ok); }
+    .verdict.reject { background:rgba(248,81,73,.12); border:1px solid rgba(248,81,73,.4); color:var(--bad); }
+    .verdict.frozen { font-size:12px; font-weight:400; color:var(--mut); margin-left:auto; }
+    .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:14px; }
+    .stat { background:#0d1117; border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+    .stat .k { font-size:11px; color:var(--mut); } .stat .v { font-size:18px; font-weight:600; margin-top:2px; }
+    table { width:100%; border-collapse:collapse; font-size:12.5px; }
+    th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+    th { color:var(--mut); font-weight:500; position:sticky; top:0; background:var(--panel); }
+    td.mono, .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .dir-reader { color:var(--reader); font-weight:600; } .dir-card { color:var(--card); font-weight:600; }
+    .tag { display:inline-block; padding:1px 7px; border-radius:99px; font-size:11px; border:1px solid var(--line); }
+    .tag.I { color:#79c0ff; border-color:#305179; } .tag.R { color:#7ee787; border-color:#2d6a44; } .tag.S { color:#d2a8ff; border-color:#5b3f7a; }
+    .tag.INVALID { color:var(--bad); border-color:#7a2f2c; }
+    .dup { color:var(--warn); }
+    details { margin-top:10px; }
+    summary { cursor:pointer; color:var(--mut); font-size:12px; }
+    pre.snap { background:#0d1117; border:1px solid var(--line); border-radius:6px; padding:8px; overflow:auto; font-size:11px; margin:4px 0; }
+    .apdu { background:#0d1117; border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-bottom:8px; }
+    .apdu .hex { word-break:break-all; }
+    #banner { margin:0 0 12px; padding:9px 12px; border-radius:8px; font-size:12.5px; display:none; }
+    #banner.conflict { display:block; background:rgba(210,153,34,.12); border:1px solid rgba(210,153,34,.5); color:#e3b341; }
+    #banner.info { display:block; background:rgba(88,166,255,.1); border:1px solid rgba(88,166,255,.4); color:#79c0ff; }
+    #banner.errorbox { display:block; background:rgba(248,81,73,.12); border:1px solid rgba(248,81,73,.4); color:var(--bad); }
+    .errline { color:var(--bad); font-size:12.5px; margin:6px 0 12px; }
+    .errline b { color:var(--bad); }
+    .empty { color:var(--mut); font-size:12.5px; padding:10px 0; }
+    .auditlist { font-size:12px; max-height:180px; overflow:auto; }
+    .auditlist a { color:#79c0ff; cursor:pointer; text-decoration:underline; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>读卡器升级指令 · T=1 隔离复核台</h1>
+  <span id="health">健康检查中…</span>
+</header>
+<main>
+  <section class="panel">
+    <h2>审计标识与捕获录入</h2>
+    <label for="auditId">审计标识（审计 ID）</label>
+    <input id="auditId" type="text" placeholder="例如 AUDIT-2026-1003-01" />
+    <label for="reviewer">审查员</label>
+    <input id="reviewer" type="text" placeholder="工号 / 姓名（可选）" />
+    <label for="capture">按捕获顺序录入带方向的十六进制 T=1 原始块（≤ 64 条，每行一条）</label>
+    <textarea id="capture" spellcheck="false" placeholder="reader: NAD PCB LEN INF... LRC&#10;card:   NAD PCB LEN INF... LRC&#10;&#10;示例：&#10;reader: 12000700A40400023F0088&#10;card: 12900082"></textarea>
+    <div class="hint">格式：每行 <span class="mono">reader|card: 十六进制</span>；空行与 <span class="mono">#</span> 注释行会被忽略；LRC 由服务端校验，请勿手工拆分。</div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" id="submit">冻结并裁决</button>
+      <button id="load">读取已冻结结果</button>
+      <button id="sample">填入合法重传样例</button>
+    </div>
+    <p class="hint" id="parsedCount"></p>
+
+    <h2 style="margin-top:20px">已冻结审计</h2>
+    <div class="auditlist" id="auditList"><span class="empty">尚无记录。</span></div>
+  </section>
+
+  <section class="panel">
+    <h2>冻结裁决与证据</h2>
+    <div id="banner"></div>
+    <div id="result"><span class="empty">提交或读取一份捕获后，此处展示经真实 API 返回的冻结结果。</span></div>
+  </section>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>
